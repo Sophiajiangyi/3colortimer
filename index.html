@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#14161a">
+<title>时间记录</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div id="update-banner" class="update-banner hidden" role="alert">
+  <span>有新版本，点击刷新</span>
+  <button id="update-banner-btn" type="button">刷新</button>
+</div>
+
+<div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+<header class="app-header">
+  <h1>时间记录</h1>
+  <button id="btn-settings" class="icon-btn" type="button" aria-label="设置">⚙</button>
+</header>
+
+<main>
+  <!-- 记录 -->
+  <section id="view-record" class="view">
+    <div class="timer-grid" id="timer-grid"></div>
+
+    <div class="section-head">
+      <h2 id="record-list-title">今天</h2>
+    </div>
+    <ul id="record-list" class="record-list"></ul>
+    <p id="record-list-empty" class="empty-hint hidden">今天还没有记录</p>
+  </section>
+
+  <!-- 统计 -->
+  <section id="view-stats" class="view hidden">
+    <div class="card">
+      <h2>今日统计</h2>
+      <div id="today-segbar" class="chart-wrap"></div>
+      <div id="today-legend" class="legend"></div>
+      <table class="stats-table" id="today-stats-table">
+        <thead><tr><th>分类</th><th>总时长</th><th>次数</th><th>平均单次</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>近 7 天</h2>
+      <div id="week-chart" class="chart-wrap"></div>
+      <div id="week-legend" class="legend"></div>
+    </div>
+  </section>
+
+  <!-- 数据 -->
+  <section id="view-data" class="view hidden">
+    <div class="card">
+      <h2>备份</h2>
+      <p class="hint-text">数据只存在本机浏览器里，清除浏览器数据或恢复出厂设置会导致丢失，建议定期导出备份。</p>
+      <button id="btn-export-csv" class="btn btn-block" type="button">导出 CSV（可用 Excel 查看）</button>
+      <button id="btn-export-json" class="btn btn-block" type="button">导出 JSON（完整备份）</button>
+      <label class="btn btn-block btn-secondary" for="input-import-json">导入 JSON（恢复备份）</label>
+      <input id="input-import-json" type="file" accept="application/json" class="hidden">
+    </div>
+
+    <div class="card">
+      <h2>设置</h2>
+      <label class="field-row">
+        <span>一天的起始时间</span>
+        <select id="select-day-start-hour"></select>
+      </label>
+      <p class="hint-text">跨零点的记录不会被拆分，只按开始时间归属到对应的一天。</p>
+    </div>
+
+    <div class="card">
+      <h2>全部记录</h2>
+      <p class="hint-text" id="total-record-count"></p>
+    </div>
+  </section>
+</main>
+
+<nav class="tab-bar">
+  <button class="tab-btn active" data-view="record" type="button">记录</button>
+  <button class="tab-btn" data-view="stats" type="button">统计</button>
+  <button class="tab-btn" data-view="data" type="button">数据</button>
+</nav>
+
+<button id="btn-add-manual" class="fab" type="button" aria-label="手动补录">+</button>
+
+<!-- 手动补录 / 编辑记录 弹层 -->
+<div id="modal-record" class="modal-overlay hidden">
+  <div class="modal">
+    <h2 id="modal-record-title">手动补录</h2>
+    <form id="form-record">
+      <label class="field-row">
+        <span>分类</span>
+        <select id="field-category" required></select>
+      </label>
+      <label class="field-row">
+        <span>开始时间</span>
+        <input id="field-start" type="datetime-local" step="60" required>
+      </label>
+      <label class="field-row">
+        <span>结束时间</span>
+        <input id="field-end" type="datetime-local" step="60" required>
+      </label>
+      <p id="field-duration-preview" class="hint-text"></p>
+      <p id="field-overlap-warning" class="warning-text hidden">这段时间和已有记录有重叠，仍可保存。</p>
+      <div class="modal-actions">
+        <button type="button" id="btn-record-delete" class="btn btn-danger hidden">删除</button>
+        <button type="button" id="btn-record-cancel" class="btn btn-secondary">取消</button>
+        <button type="submit" class="btn">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- 忘记结束计时 兜底弹层 -->
+<div id="modal-forgotten" class="modal-overlay hidden">
+  <div class="modal">
+    <h2>有一个计时还在进行</h2>
+    <p id="forgotten-desc" class="hint-text"></p>
+    <div class="modal-actions modal-actions-col">
+      <button type="button" id="btn-forgotten-now" class="btn btn-block">按当前时间结束</button>
+      <button type="button" id="btn-forgotten-manual" class="btn btn-block btn-secondary">手动填结束时间</button>
+      <button type="button" id="btn-forgotten-discard" class="btn btn-block btn-danger">丢弃这次计时</button>
+    </div>
+  </div>
+</div>
+
+<!-- JSON 导入确认弹层 -->
+<div id="modal-import" class="modal-overlay hidden">
+  <div class="modal">
+    <h2>确认导入</h2>
+    <p id="import-summary" class="hint-text"></p>
+    <div class="modal-actions">
+      <button type="button" id="btn-import-cancel" class="btn btn-secondary">取消</button>
+      <button type="button" id="btn-import-confirm" class="btn">确认导入</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
