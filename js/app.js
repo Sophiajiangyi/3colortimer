@@ -2,7 +2,12 @@
 import { CATEGORIES, categoryLabel, categoryColor } from './config.js';
 import * as db from './db.js';
 import { getSettings, setSettings } from './settings.js';
-import { todayRange, last7DayKeys, last7DaysRange, dayKeyOf } from './day.js';
+import {
+  todayRange, last7DayKeys, last7DaysRange, dayKeyOf, formatDayKeyShort,
+  monthKeyOf, monthRange, shiftMonthKey, daysInMonth, formatMonthKeyLong, formatMonthKeyShort,
+  quarterKeyOf, quarterRange, shiftQuarterKey, weeksInQuarter, formatQuarterKeyLong,
+  yearKeyOf, yearRange, shiftYearKey, monthsInYear, formatYearKeyLong,
+} from './day.js';
 import {
   getActiveTimer, startTimer, clearActiveTimer, endActiveTimer,
   elapsedMs, isForgotten, formatElapsed, formatDurationMinutes,
@@ -79,7 +84,7 @@ async function renderView(view) {
     await renderTodayList();
   } else if (view === 'stats') {
     await renderStatsToday();
-    await renderStatsWeek();
+    await renderStatsTrend();
   } else if (view === 'data') {
     await renderDataView();
   }
@@ -196,23 +201,113 @@ async function renderStatsToday() {
   `).join('');
 }
 
-// ---------- 统计：近 7 天 ----------
-async function renderStatsWeek() {
-  const dayKeys = last7DayKeys();
-  const { start, end } = last7DaysRange();
-  const records = await db.rangeQuery(start, end);
-  const grouped = groupByDay(records, dayKeyOf);
-  const totalsByDay = new Map();
-  for (const key of dayKeys) {
-    const dayRecords = grouped.get(key) || [];
-    const { byCategory } = aggregateByCategory(dayRecords);
-    totalsByDay.set(key, { byCategory });
+// ---------- 统计：趋势（近7天 / 本月 / 本季度 / 本年） ----------
+let statsPeriodType = 'week7'; // 'week7' | 'month' | 'quarter' | 'year'
+let statsPeriodKey = null; // 仅 month/quarter/year 有意义；null 表示尚未定，渲染时取「当前」周期
+
+function shiftStatsPeriodKey(n) {
+  if (statsPeriodType === 'month') return shiftMonthKey(statsPeriodKey, n);
+  if (statsPeriodType === 'quarter') return shiftQuarterKey(statsPeriodKey, n);
+  if (statsPeriodType === 'year') return shiftYearKey(statsPeriodKey, n);
+  return statsPeriodKey;
+}
+
+async function renderStatsTrend() {
+  const now = Date.now();
+  let bucketKeys, start, end, bucketKeyFn, labelFn, titleText, showNav, canGoNext;
+
+  if (statsPeriodType === 'month') {
+    if (!statsPeriodKey) statsPeriodKey = monthKeyOf(now);
+    bucketKeys = daysInMonth(statsPeriodKey);
+    ({ start, end } = monthRange(statsPeriodKey));
+    bucketKeyFn = dayKeyOf;
+    labelFn = formatDayKeyShort;
+    titleText = formatMonthKeyLong(statsPeriodKey);
+    showNav = true;
+    canGoNext = statsPeriodKey !== monthKeyOf(now);
+  } else if (statsPeriodType === 'quarter') {
+    if (!statsPeriodKey) statsPeriodKey = quarterKeyOf(now);
+    const buckets = weeksInQuarter(statsPeriodKey);
+    bucketKeys = buckets.map((b) => b.key);
+    ({ start, end } = quarterRange(statsPeriodKey));
+    bucketKeyFn = (ts) => {
+      const b = buckets.find((bk) => ts >= bk.start && ts < bk.end);
+      return b ? b.key : buckets[buckets.length - 1].key;
+    };
+    labelFn = formatDayKeyShort;
+    titleText = formatQuarterKeyLong(statsPeriodKey);
+    showNav = true;
+    canGoNext = statsPeriodKey !== quarterKeyOf(now);
+  } else if (statsPeriodType === 'year') {
+    if (!statsPeriodKey) statsPeriodKey = yearKeyOf(now);
+    bucketKeys = monthsInYear(statsPeriodKey);
+    ({ start, end } = yearRange(statsPeriodKey));
+    bucketKeyFn = monthKeyOf;
+    labelFn = formatMonthKeyShort;
+    titleText = formatYearKeyLong(statsPeriodKey);
+    showNav = true;
+    canGoNext = statsPeriodKey !== yearKeyOf(now);
+  } else {
+    // week7
+    bucketKeys = last7DayKeys(now);
+    ({ start, end } = last7DaysRange(now));
+    bucketKeyFn = dayKeyOf;
+    labelFn = formatDayKeyShort;
+    titleText = '近7天';
+    showNav = false;
+    canGoNext = false;
   }
-  document.getElementById('week-chart').innerHTML = renderStackedBarChart(dayKeys, totalsByDay);
+
+  const records = await db.rangeQuery(start, end);
+  const grouped = groupByDay(records, bucketKeyFn);
+  const totalsByBucket = new Map();
+  for (const key of bucketKeys) {
+    const bucketRecords = grouped.get(key) || [];
+    const { byCategory } = aggregateByCategory(bucketRecords);
+    totalsByBucket.set(key, { byCategory });
+  }
+
+  const chartEl = document.getElementById('week-chart');
+  chartEl.innerHTML = renderStackedBarChart(bucketKeys, totalsByBucket, { labelFn });
+  chartEl.classList.toggle('chart-wrap--scroll', bucketKeys.length > 12);
   document.getElementById('week-legend').innerHTML = renderLegend(
     CATEGORIES.map((c) => ({ ...c, totalMs: 1 }))
   );
+
+  document.getElementById('period-title').textContent = titleText;
+  const prevBtn = document.getElementById('period-prev');
+  const nextBtn = document.getElementById('period-next');
+  prevBtn.classList.toggle('hidden', !showNav);
+  nextBtn.classList.toggle('hidden', !showNav);
+  nextBtn.disabled = !canGoNext;
+
+  document.querySelectorAll('#period-chips .chip').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.period === statsPeriodType);
+  });
 }
+
+document.querySelectorAll('#period-chips .chip').forEach((btn) => {
+  btn.addEventListener('click', async () => {
+    const period = btn.dataset.period;
+    if (period === statsPeriodType) return;
+    statsPeriodType = period;
+    statsPeriodKey = null;
+    await renderStatsTrend();
+  });
+});
+
+document.getElementById('period-prev').addEventListener('click', async () => {
+  if (statsPeriodType === 'week7') return;
+  statsPeriodKey = shiftStatsPeriodKey(-1);
+  await renderStatsTrend();
+});
+
+document.getElementById('period-next').addEventListener('click', async () => {
+  const nextBtn = document.getElementById('period-next');
+  if (statsPeriodType === 'week7' || nextBtn.disabled) return;
+  statsPeriodKey = shiftStatsPeriodKey(1);
+  await renderStatsTrend();
+});
 
 // ---------- 数据视图 ----------
 async function renderDataView() {

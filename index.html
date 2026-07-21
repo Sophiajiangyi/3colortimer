@@ -49,7 +49,18 @@
     </div>
 
     <div class="card">
-      <h2>近 7 天</h2>
+      <h2>趋势</h2>
+      <div class="period-chips" id="period-chips">
+        <button type="button" class="chip" data-period="week7">近7天</button>
+        <button type="button" class="chip" data-period="month">本月</button>
+        <button type="button" class="chip" data-period="quarter">本季度</button>
+        <button type="button" class="chip" data-period="year">本年</button>
+      </div>
+      <div class="period-nav">
+        <button type="button" class="icon-btn period-nav-btn hidden" id="period-prev" aria-label="上一个周期">◀</button>
+        <span class="period-title" id="period-title"></span>
+        <button type="button" class="icon-btn period-nav-btn hidden" id="period-next" aria-label="下一个周期">▶</button>
+      </div>
       <div id="week-chart" class="chart-wrap"></div>
       <div id="week-legend" class="legend"></div>
     </div>

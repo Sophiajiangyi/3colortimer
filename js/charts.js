@@ -29,29 +29,36 @@ export function renderSegmentedBar(byCategory, { width = 320, height = 28 } = {}
   </svg>`;
 }
 
-// 近 7 天堆叠柱状图。
-// dayKeys: 7 个 dayKey（旧到新）；totalsByDay: Map(dayKey -> {byCategory:[{key,totalMs,color},...]})
-export function renderStackedBarChart(dayKeys, totalsByDay, { width = 320, height = 180 } = {}) {
+// 堆叠柱状图，用于近7天/本月/本季度/本年趋势。
+// bucketKeys: 桶 key 列表（旧到新）；totalsByBucket: Map(bucketKey -> {byCategory:[{key,totalMs,color},...]})
+// labelFn: 把 bucketKey 转成 x 轴短标签的函数，默认沿用 formatDayKeyShort（近7天场景不受影响）。
+// 桶数较多时（>12，如本月~30根、本季度~13根）按每桶最小像素宽度撑开实际 SVG 宽度，交给外层容器横向滚动；
+// 桶数不多时（近7天、本年 ≤12 根）仍然 width:100% 撑满容器、不滚动。
+export function renderStackedBarChart(bucketKeys, totalsByBucket, { height = 180, labelFn = formatDayKeyShort, minBarWidth = 22, barGap = 8 } = {}) {
   const padLeft = 30;
   const padBottom = 20;
   const padTop = 10;
-  const chartW = width - padLeft - 8;
+  const padRight = 8;
+
+  const n = bucketKeys.length;
+  const scrollable = n > 12;
+  const width = scrollable ? padLeft + padRight + n * minBarWidth + (n - 1) * barGap : 320;
+  const chartW = width - padLeft - padRight;
   const chartH = height - padBottom - padTop;
 
-  const dayTotals = dayKeys.map((k) => {
-    const entry = totalsByDay.get(k);
+  const bucketTotals = bucketKeys.map((k) => {
+    const entry = totalsByBucket.get(k);
     if (!entry) return 0;
     return entry.byCategory.reduce((sum, c) => sum + c.totalMs, 0);
   });
-  let maxMs = Math.max(...dayTotals, 0);
+  let maxMs = Math.max(...bucketTotals, 0);
   if (maxMs <= 0) maxMs = 3600000; // 无数据时给个默认 1 小时刻度
 
   // 取整到最近的整小时，留出顶部余量
   const maxHours = Math.ceil(maxMs / 3600000);
   const scaleMaxMs = Math.max(maxHours, 1) * 3600000;
 
-  const barGap = 8;
-  const barWidth = (chartW - barGap * (dayKeys.length - 1)) / dayKeys.length;
+  const barWidth = scrollable ? minBarWidth : (chartW - barGap * (n - 1)) / n;
 
   const gridLines = [];
   const gridCount = Math.min(maxHours, 6) || 1;
@@ -63,8 +70,8 @@ export function renderStackedBarChart(dayKeys, totalsByDay, { width = 320, heigh
     gridLines.push(`<text x="${padLeft - 6}" y="${(y + 3).toFixed(1)}" font-size="9" fill="var(--chart-text, #9aa0a8)" text-anchor="end">${hourVal.toFixed(0)}h</text>`);
   }
 
-  const bars = dayKeys.map((key, i) => {
-    const entry = totalsByDay.get(key);
+  const bars = bucketKeys.map((key, i) => {
+    const entry = totalsByBucket.get(key);
     const x = padLeft + i * (barWidth + barGap);
     let yCursor = padTop + chartH;
     let segs = '';
@@ -78,12 +85,13 @@ export function renderStackedBarChart(dayKeys, totalsByDay, { width = 320, heigh
         segs += `<rect x="${x.toFixed(2)}" y="${yCursor.toFixed(2)}" width="${barWidth.toFixed(2)}" height="${segH.toFixed(2)}" fill="${cat.color}"><title>${escapeXml(cat.label)} ${(ms / 60000).toFixed(0)} 分钟</title></rect>`;
       }
     }
-    const label = formatDayKeyShort(key);
+    const label = labelFn(key);
     const labelY = height - 4;
-    return `${segs}<text x="${(x + barWidth / 2).toFixed(2)}" y="${labelY}" font-size="9" fill="var(--chart-text, #9aa0a8)" text-anchor="middle">${label}</text>`;
+    return `${segs}<text x="${(x + barWidth / 2).toFixed(2)}" y="${labelY}" font-size="9" fill="var(--chart-text, #9aa0a8)" text-anchor="middle">${escapeXml(label)}</text>`;
   }).join('');
 
-  return `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" class="stackedbar" role="img" aria-label="近7天分类时长">
+  const widthAttr = scrollable ? `width="${width}"` : 'width="100%"';
+  return `<svg viewBox="0 0 ${width} ${height}" ${widthAttr} height="${height}" class="stackedbar" role="img" aria-label="周期分类时长">
     ${gridLines.join('')}
     ${bars}
   </svg>`;
