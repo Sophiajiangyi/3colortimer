@@ -1,5 +1,5 @@
 // sw.js — 离线缓存 + 版本更新提示。缓存名带版本号，改版本号即可让浏览器发现更新。
-const CACHE_VERSION = 'v3';
+const CACHE_VERSION = 'v4';
 const CACHE_NAME = `time-control-${CACHE_VERSION}`;
 
 const PRECACHE_URLS = [

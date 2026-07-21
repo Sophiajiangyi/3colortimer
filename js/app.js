@@ -563,19 +563,26 @@ function initServiceWorker() {
       });
     });
   }).catch(() => {});
+  // 只有用户点了更新横幅的「刷新」按钮才自动重载；首次安装/自然激活触发的
+  // controllerchange 不重载，避免打开 App 时被意外强制刷新一次。
   let refreshing = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (refreshing) return;
+    if (refreshing || !userRequestedSwReload) return;
     refreshing = true;
     window.location.reload();
   });
 }
 
+let userRequestedSwReload = false;
+
 function showUpdateBanner(reg) {
   const banner = document.getElementById('update-banner');
   banner.classList.remove('hidden');
   document.getElementById('update-banner-btn').addEventListener('click', () => {
-    if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+    if (reg.waiting) {
+      userRequestedSwReload = true;
+      reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+    }
   }, { once: true });
 }
 
