@@ -3,7 +3,7 @@
 export const CATEGORIES = [
   { key: 'study', label: '学习', color: '#4f9dff' },
   { key: 'work', label: '工作', color: '#ffb454' },
-  { key: 'idle', label: '摆烂', color: '#8a8f98' },
+  { key: 'idle', label: '娱乐', color: '#e0679e' },
 ];
 
 export const CATEGORY_MAP = Object.fromEntries(CATEGORIES.map((c) => [c.key, c]));

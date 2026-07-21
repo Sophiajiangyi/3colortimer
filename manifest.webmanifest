@@ -1,6 +1,6 @@
 {
-  "name": "时间记录",
-  "short_name": "时间记录",
+  "name": "三色时光机",
+  "short_name": "三色时光机",
   "description": "个人自用的时间记录工具",
   "start_url": "./index.html",
   "scope": "./",
