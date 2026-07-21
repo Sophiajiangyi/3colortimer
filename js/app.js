@@ -552,7 +552,7 @@ document.getElementById('btn-forgotten-discard').addEventListener('click', async
 // ---------- Service Worker ----------
 function initServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
-  navigator.serviceWorker.register('sw.js').then((reg) => {
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then((reg) => {
     reg.addEventListener('updatefound', () => {
       const installing = reg.installing;
       if (!installing) return;

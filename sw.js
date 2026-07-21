@@ -1,5 +1,5 @@
 // sw.js — 离线缓存 + 版本更新提示。缓存名带版本号，改版本号即可让浏览器发现更新。
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3';
 const CACHE_NAME = `time-control-${CACHE_VERSION}`;
 
 const PRECACHE_URLS = [
@@ -21,8 +21,16 @@ const PRECACHE_URLS = [
 ];
 
 self.addEventListener('install', (event) => {
+  // 逐个用 {cache:'reload'} 拉取，绕过 GitHub Pages 的 10 分钟 HTTP 缓存，
+  // 避免刚部署完就把旧字节写进 Cache Storage。
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_URLS))
+    caches.open(CACHE_NAME).then((cache) =>
+      Promise.all(
+        PRECACHE_URLS.map((url) =>
+          fetch(url, { cache: 'reload' }).then((res) => cache.put(url, res))
+        )
+      )
+    )
   );
 });
 
